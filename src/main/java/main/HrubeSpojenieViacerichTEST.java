@@ -12,8 +12,8 @@ public class HrubeSpojenieViacerichTEST {
 
 	public static void main(String[] args) {
 		BufferedImage image1 = UtilImageIO.loadImage("./multiple/a.jpg");
-		BufferedImage image2 = UtilImageIO.loadImage("./multiple/c.jpg");
-		BufferedImage image3 = UtilImageIO.loadImage("./multiple/b.jpg");
+		BufferedImage image2 = UtilImageIO.loadImage("./multiple/b.jpg");
+		BufferedImage image3 = UtilImageIO.loadImage("./multiple/c.jpg");
 		List<BufferedImage> images = new LinkedList<>();
 		images.add(image1);
 		images.add(image2);

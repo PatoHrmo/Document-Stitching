@@ -64,12 +64,11 @@ public class Stitcher {
 		describeImage(imageB, detDesc, pointsB, descB);
  
 		// Associate features between the two images
-		long cas = System.currentTimeMillis();
+		
 		associate.setSource(descA);
 		associate.setDestination(descB);
 		associate.associate();
-		cas = System.currentTimeMillis()-cas;
-		System.out.println(cas);
+		
 		// create a list of AssociatedPairs that tell the model matcher how a feature moved
 		FastQueue<AssociatedIndex> matches = associate.getMatches();
 		List<AssociatedPair> pairs = new ArrayList<>();
@@ -138,6 +137,7 @@ public class Stitcher {
 	public static BufferedImage renderStitching( BufferedImage imageA, BufferedImage imageB ,
 			Homography2D_F64 fromAtoB )
 	{
+		long cas = System.currentTimeMillis();
 		// specify size of output image
 		double scale = 1;
  
@@ -176,7 +176,8 @@ public class Stitcher {
 		ConvertBufferedImage.convertTo(work,output,true);
  
 		Graphics2D g2 = output.createGraphics();
- 
+		cas = System.currentTimeMillis()-cas;
+		System.out.println(cas);
 		return output;
 	}
  

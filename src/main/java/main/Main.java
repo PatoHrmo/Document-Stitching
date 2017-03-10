@@ -32,7 +32,7 @@ public class Main {
 			List<BufferedImage> images = new java.util.LinkedList<>();
 			images.add(image1);
 			images.add(image2);
-			stitchedImage = sti.stitch(images, GrayF32.class);
+			stitchedImage = Stitcher.stitch(image1,image2, GrayF32.class);
 			UtilImageIO.saveImage(stitchedImage, pathToConcreteDataset+"/stitched.jpg");
 			UtilImageIO.saveImage(image1, pathToConcreteDataset+"/1.jpg");
 			UtilImageIO.saveImage(image2, pathToConcreteDataset+"/2.jpg");
