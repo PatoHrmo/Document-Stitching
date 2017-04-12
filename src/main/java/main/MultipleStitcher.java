@@ -5,8 +5,7 @@ import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
-import org.apache.logging.log4j.LogManager;
-import org.apache.logging.log4j.Logger;
+
 import org.ddogleg.fitting.modelset.ModelMatcher;
 import org.ddogleg.struct.FastQueue;
 
@@ -43,19 +42,19 @@ import georegression.struct.point.Point2D_I32;
 import georegression.transform.homography.HomographyPointOps_F64;
 
 public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
-	private static Logger logger = LogManager.getLogger();
+	
 	public BufferedImage stitch(List<BufferedImage> images, Class<T> imageType) {
-		logger.entry(images, imageType);
+		
 		// Detect using the standard SURF feature descriptor and describer
 		DetectDescribePoint<T, BrightFeature> detDesc = FactoryDetectDescribe
-				.surfFast(new ConfigFastHessian(1, 2, 3000, 1, 9, 4, 4), null, null, imageType);
+				.surfStable(new ConfigFastHessian(1, 2, 5000, 1, 9, 4, 4), null, null, imageType);
 		ScoreAssociation<BrightFeature> scorer = FactoryAssociation.scoreEuclidean(BrightFeature.class, true);
 		AssociateDescription<BrightFeature> associate = FactoryAssociation.greedy(scorer, 1, true);
 		
 		// fit the images using a homography. This works well for rotations and
 		// distant objects.
 		ModelMatcher<Homography2D_F64, AssociatedPair> modelMatcher = FactoryMultiViewRobust.homographyRansac(null,
-				new ConfigRansac(1000, 0.5));
+				new ConfigRansac(1000, 1));
 		// ModelMatcher<Homography2D_F64,AssociatedPair> modelMatcher =
 		// FactoryMultiViewRobust.homographyLMedS(null, new
 		// ConfigLMedS(1000,1000));
@@ -68,20 +67,20 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 		FastQueue<AssociatedIndex> matches = new FastQueue<>(1000, AssociatedIndex.class, true);
 		int indexOfBestImageToConnect = 0;
 		while (!describedImages.isEmpty()) {
-			logger.info("v zozname este nespojenych obrazkov sa nachadza este "+describedImages.size()+" obrazkov");
+			
 			bestNumberOfMatches = 0;
 			for (int i = 0; i < describedImages.size(); i++) {
 				associate.setSource(main.desc);
 				associate.setDestination(describedImages.get(i).desc);
 				associate.associate();
-				logger.info("medzi mainom a obrazkom napozicii " + i + " je " + associate.getMatches().size + " matchov");
+				
 				if (associate.getMatches().size > bestNumberOfMatches) {
 					bestNumberOfMatches = associate.getMatches().size;
 					indexOfBestImageToConnect = i;
 					matches = cloneMatchesFromAssociater(associate);
 				}
 			}
-			logger.info("s mainom idem spajat obrazok na pozicii " + indexOfBestImageToConnect);
+			
 			bestImageToConnect = describedImages.remove(indexOfBestImageToConnect);
 			List<AssociatedPair> pairs = new ArrayList<>();
 
@@ -101,7 +100,7 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 			connect(main, bestImageToConnect, homografia, imageType);
 		}
 
-		return logger.traceExit(main.colorImage);
+		return main.colorImage;
 	}
 
 	private FastQueue<AssociatedIndex> cloneMatchesFromAssociater(AssociateDescription<BrightFeature> associate) {
@@ -218,7 +217,7 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 	}
 
 	private List<DescribedImage> computeDescriptions(List<BufferedImage> inputImages, DetectDescribePoint detDesc) {
-		logger.entry(inputImages);
+		
 		List<DescribedImage> descImages = new LinkedList<>();
 
 		for (BufferedImage im : inputImages) {
@@ -226,7 +225,7 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 			descImg.describe();
 			descImages.add(descImg);
 		}
-		return logger.traceExit(descImages);
+		return descImages;
 	}
 
 	private static Point2D_I32 renderPoint(int x0, int y0, Homography2D_F64 fromBtoWork) {

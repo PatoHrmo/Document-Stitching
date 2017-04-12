@@ -64,8 +64,12 @@ $RECYCLE.BIN/
 
 # Datasets
 #==========================
-
+target
+*test.xml
 datasety
+dataset
+tessdata
+stare datasety
 homografyTestDataset
 multiple
 stare data
