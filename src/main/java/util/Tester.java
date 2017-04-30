@@ -25,6 +25,7 @@ public class Tester {
 	private NormalizedLevenshtein levenstien;
 	private ITesseract tesseractOcr;
 	private boolean saveTextFromOcr;
+	private long casPoslednehoSpoju;
 	/**
 	 * 
 	 * @param nameOfFolder
@@ -39,6 +40,7 @@ public class Tester {
 		levenstien = new NormalizedLevenshtein();
 		tesseractOcr = new Tesseract();
 		this.saveTextFromOcr = true;
+		casPoslednehoSpoju = 0;
 
 	}
     /**
@@ -59,8 +61,8 @@ public class Tester {
 		System.gc();
 		System.out.println("chystam sa spojit " + obrazky.size() + " obrazkov");
 		long casPredSpajanim = System.currentTimeMillis();
-		BufferedImage stitched = stitcher.stitch(obrazky, GrayF32.class);
-		System.out.println("spajanie trvalo "+(System.currentTimeMillis()-casPredSpajanim)+" miliskund");
+		BufferedImage stitched = stitcher.stitch(obrazky, GrayF32.class,12);
+		casPoslednehoSpoju = System.currentTimeMillis()-casPredSpajanim;
 		UtilImageIO.saveImage(stitched, folderWithPictures.getPath() + "/stitched.jpg");
 		return stitched;
 
@@ -71,6 +73,7 @@ public class Tester {
 	public void runTests() {
 		File helpFile = new File(nameOfFolder);
 		double qualitySum = 0;
+		long celkomCas = 0;
 		int stitchedPicturesCount = 0;
 		Stack<File> files = new Stack<>();
 		files.add(helpFile);
@@ -84,6 +87,8 @@ public class Tester {
 				double quality = compareStitchedWithGrandTruth(helpFile);
 				qualitySum += quality;
 				System.out.println("spajanie je na "+quality*100+"% presné");
+				System.out.println("spajanie trvalo "+casPoslednehoSpoju+" miliskund");
+				celkomCas+= casPoslednehoSpoju;
 				System.out.println();
 				stitchedPicturesCount++;
 			} else {
@@ -94,6 +99,7 @@ public class Tester {
 
 		}
 		System.out.println("spájanie celého datasetu je na " + qualitySum * 100 / stitchedPicturesCount + "% presné");
+		System.out.println("spájanie datasetu trvalo "+celkomCas);
 	}
 	/**
 	 * compares text from grantruth picture and stitched picture

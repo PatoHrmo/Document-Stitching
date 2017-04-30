@@ -1,10 +1,10 @@
 package main;
 
 import java.awt.image.BufferedImage;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
-
 
 import org.ddogleg.fitting.modelset.ModelMatcher;
 import org.ddogleg.struct.FastQueue;
@@ -18,10 +18,10 @@ import boofcv.alg.distort.ImageDistort;
 import boofcv.alg.distort.PixelTransformHomography_F32;
 import boofcv.alg.distort.impl.DistortSupport;
 import boofcv.alg.interpolate.InterpolatePixelS;
-import boofcv.core.image.ConvertImage;
 import boofcv.core.image.border.BorderType;
 import boofcv.factory.feature.associate.FactoryAssociation;
 import boofcv.factory.feature.detdesc.FactoryDetectDescribe;
+import boofcv.factory.geo.ConfigLMedS;
 import boofcv.factory.geo.ConfigRansac;
 import boofcv.factory.geo.FactoryMultiViewRobust;
 import boofcv.factory.interpolate.FactoryInterpolation;
@@ -29,35 +29,36 @@ import boofcv.io.image.ConvertBufferedImage;
 import boofcv.struct.feature.AssociatedIndex;
 import boofcv.struct.feature.BrightFeature;
 import boofcv.struct.feature.TupleDesc;
-import boofcv.struct.feature.TupleDesc_F64;
 import boofcv.struct.geo.AssociatedPair;
 import boofcv.struct.image.GrayF32;
-import boofcv.struct.image.ImageBase;
 import boofcv.struct.image.ImageGray;
-import boofcv.struct.image.ImageMultiBand;
 import boofcv.struct.image.Planar;
 import georegression.struct.homography.Homography2D_F64;
 import georegression.struct.point.Point2D_F64;
 import georegression.struct.point.Point2D_I32;
 import georegression.transform.homography.HomographyPointOps_F64;
+import net.coobird.thumbnailator.Thumbnails;
 
 public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
-	
-	public BufferedImage stitch(List<BufferedImage> images, Class<T> imageType) {
+
+	public BufferedImage stitch(List<BufferedImage> images, Class<T> imageType,
+			int cielovaVelkostPismaVPixloch) {
+		// zmen velkost obrazkov tak, aby na nich boli priblizne rovnako velke pismenka
+		images = resize(images, cielovaVelkostPismaVPixloch);
 		
 		// Detect using the standard SURF feature descriptor and describer
 		DetectDescribePoint<T, BrightFeature> detDesc = FactoryDetectDescribe
-				.surfStable(new ConfigFastHessian(1, 2, 5000, 1, 9, 4, 4), null, null, imageType);
+				.surfStable(new ConfigFastHessian(1.1f, 2, 5000, 1, 9, 4, 4), null, null, imageType);
 		ScoreAssociation<BrightFeature> scorer = FactoryAssociation.scoreEuclidean(BrightFeature.class, true);
-		AssociateDescription<BrightFeature> associate = FactoryAssociation.greedy(scorer, 1, true);
-		
+		AssociateDescription<BrightFeature> associate = FactoryAssociation.greedy(scorer, Double.MAX_VALUE, true);
+
 		// fit the images using a homography. This works well for rotations and
 		// distant objects.
 		ModelMatcher<Homography2D_F64, AssociatedPair> modelMatcher = FactoryMultiViewRobust.homographyRansac(null,
-				new ConfigRansac(1000, 1));
-		// ModelMatcher<Homography2D_F64,AssociatedPair> modelMatcher =
-		// FactoryMultiViewRobust.homographyLMedS(null, new
-		// ConfigLMedS(1000,1000));
+				new ConfigRansac(3000, 1));
+//		 ModelMatcher<Homography2D_F64,AssociatedPair> modelMatcher =
+//		 FactoryMultiViewRobust.homographyLMedS(null, new
+//		 ConfigLMedS(1000,3000));
 
 		List<DescribedImage> describedImages = computeDescriptions(images, detDesc);
 		DescribedImage main = describedImages.remove(0);
@@ -67,20 +68,20 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 		FastQueue<AssociatedIndex> matches = new FastQueue<>(1000, AssociatedIndex.class, true);
 		int indexOfBestImageToConnect = 0;
 		while (!describedImages.isEmpty()) {
-			
+
 			bestNumberOfMatches = 0;
 			for (int i = 0; i < describedImages.size(); i++) {
 				associate.setSource(main.desc);
 				associate.setDestination(describedImages.get(i).desc);
 				associate.associate();
-				
+
 				if (associate.getMatches().size > bestNumberOfMatches) {
 					bestNumberOfMatches = associate.getMatches().size;
 					indexOfBestImageToConnect = i;
 					matches = cloneMatchesFromAssociater(associate);
 				}
 			}
-			
+
 			bestImageToConnect = describedImages.remove(indexOfBestImageToConnect);
 			List<AssociatedPair> pairs = new ArrayList<>();
 
@@ -101,6 +102,31 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 		}
 
 		return main.colorImage;
+	}
+
+	private List<BufferedImage> resize(List<BufferedImage> images, int cielovaVelkostPismaVPixloch) {
+		List<BufferedImage> resiznuteObrazky = new ArrayList<>();
+		for(BufferedImage image : images) {
+			int sizeOfFont = calculateSizeOfFont(image);
+			double percentoZvascenia = ((double)cielovaVelkostPismaVPixloch)/sizeOfFont;
+			try {
+				BufferedImage res = Thumbnails.of(image)
+				        .scale(percentoZvascenia)
+				        .asBufferedImage();
+				
+				resiznuteObrazky.add(res);
+			} catch (IOException e) {
+				
+				e.printStackTrace();
+			}
+		}
+		return resiznuteObrazky;
+		
+	}
+
+	private int calculateSizeOfFont(BufferedImage image) {
+		// TODO Auto-generated method stub
+		return 20;
 	}
 
 	private FastQueue<AssociatedIndex> cloneMatchesFromAssociater(AssociateDescription<BrightFeature> associate) {
@@ -217,7 +243,7 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 	}
 
 	private List<DescribedImage> computeDescriptions(List<BufferedImage> inputImages, DetectDescribePoint detDesc) {
-		
+
 		List<DescribedImage> descImages = new LinkedList<>();
 
 		for (BufferedImage im : inputImages) {

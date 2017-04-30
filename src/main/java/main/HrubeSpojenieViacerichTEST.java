@@ -19,7 +19,7 @@ public class HrubeSpojenieViacerichTEST {
 		images.add(image2);
 		images.add(image3);
 		MultipleStitcher<GrayF32, TupleDesc> sti = new MultipleStitcher<>();
-		BufferedImage stitchedImage1 = sti.stitch(images, GrayF32.class);
+		BufferedImage stitchedImage1 = sti.stitch(images, GrayF32.class,20);
 		UtilImageIO.saveImage(stitchedImage1, "./multiple/stitched.jpg");
 	}
 

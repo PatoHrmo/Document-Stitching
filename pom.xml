@@ -14,6 +14,12 @@
 			<artifactId>core</artifactId>
 			<version>0.26</version>
 		</dependency>
+		<!-- https://mvnrepository.com/artifact/net.coobird/thumbnailator -->
+		<dependency>
+			<groupId>net.coobird</groupId>
+			<artifactId>thumbnailator</artifactId>
+			<version>0.4.8</version>
+		</dependency>
 		<dependency>
 			<groupId>info.debatty</groupId>
 			<artifactId>java-string-similarity</artifactId>
