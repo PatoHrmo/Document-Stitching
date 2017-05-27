@@ -11,8 +11,10 @@ import org.ddogleg.struct.FastQueue;
 
 import boofcv.abst.feature.associate.AssociateDescription;
 import boofcv.abst.feature.associate.ScoreAssociation;
+import boofcv.abst.feature.detdesc.ConfigCompleteSift;
 import boofcv.abst.feature.detdesc.DetectDescribePoint;
 import boofcv.abst.feature.detect.interest.ConfigFastHessian;
+import boofcv.abst.feature.detect.interest.ConfigGeneralDetector;
 import boofcv.alg.descriptor.UtilFeature;
 import boofcv.alg.distort.ImageDistort;
 import boofcv.alg.distort.PixelTransformHomography_F32;
@@ -20,7 +22,11 @@ import boofcv.alg.distort.impl.DistortSupport;
 import boofcv.alg.interpolate.InterpolatePixelS;
 import boofcv.core.image.border.BorderType;
 import boofcv.factory.feature.associate.FactoryAssociation;
+import boofcv.factory.feature.dense.ConfigDenseHoG;
+import boofcv.factory.feature.dense.FactoryDescribeImageDense;
 import boofcv.factory.feature.detdesc.FactoryDetectDescribe;
+import boofcv.factory.feature.detect.edge.FactoryEdgeDetectors;
+import boofcv.factory.feature.detect.interest.FactoryDetectPoint;
 import boofcv.factory.geo.ConfigLMedS;
 import boofcv.factory.geo.ConfigRansac;
 import boofcv.factory.geo.FactoryMultiViewRobust;
@@ -48,7 +54,9 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 		
 		// Detect using the standard SURF feature descriptor and describer
 		DetectDescribePoint<T, BrightFeature> detDesc = FactoryDetectDescribe
-				.surfStable(new ConfigFastHessian(1.1f, 2, 5000, 1, 9, 4, 4), null, null, imageType);
+				.surfStable(new ConfigFastHessian(1, 2, 500, 1, 9, 4, 4), null, null, imageType);
+//		DetectDescribePoint<T, BrightFeature> detDesc = FactoryDetectDescribe
+//			.sift(new ConfigCompleteSift(-1, 5, 5000));
 		ScoreAssociation<BrightFeature> scorer = FactoryAssociation.scoreEuclidean(BrightFeature.class, true);
 		AssociateDescription<BrightFeature> associate = FactoryAssociation.greedy(scorer, Double.MAX_VALUE, true);
 
@@ -266,7 +274,7 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 		FastQueue<BrightFeature> desc;
 		List<Point2D_F64> points;
 		DetectDescribePoint<GrayF32, BrightFeature> detDesc;
-
+		
 		public DescribedImage(BufferedImage color, DetectDescribePoint<GrayF32, BrightFeature> detDesc) {
 			this.image = ConvertBufferedImage.convertFromSingle(color, null, GrayF32.class);
 			this.desc = UtilFeature.createQueue(detDesc, 100);
@@ -276,8 +284,7 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 		}
 
 		/**
-		 * describes image in this instance using detect descriptor in this
-		 * instance
+		 * describes image in this instance using detect descriptor
 		 */
 		public void describe() {
 			detDesc.detect(image);

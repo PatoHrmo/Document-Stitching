@@ -56,12 +56,11 @@ public class Tester {
 					obrazok.getName().equals("stitched.jpg.txt") || obrazok.getName().equals("grandTruth.jpg.txt"))) {
 				obrazky.add(UtilImageIO.loadImage(obrazok.getPath()));
 			}
-
 		}
 		System.gc();
 		System.out.println("chystam sa spojit " + obrazky.size() + " obrazkov");
 		long casPredSpajanim = System.currentTimeMillis();
-		BufferedImage stitched = stitcher.stitch(obrazky, GrayF32.class,12);
+		BufferedImage stitched = stitcher.stitch(obrazky, GrayF32.class,10);
 		casPoslednehoSpoju = System.currentTimeMillis()-casPredSpajanim;
 		UtilImageIO.saveImage(stitched, folderWithPictures.getPath() + "/stitched.jpg");
 		return stitched;
