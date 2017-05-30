@@ -49,12 +49,15 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 
 	public BufferedImage stitch(List<BufferedImage> images, Class<T> imageType,
 			int cielovaVelkostPismaVPixloch) {
+		long time = System.currentTimeMillis();
 		// zmen velkost obrazkov tak, aby na nich boli priblizne rovnako velke pismenka
 		images = resize(images, cielovaVelkostPismaVPixloch);
+		System.out.println("resizovanie :" +(System.currentTimeMillis()-time));
+		time = System.currentTimeMillis();
 		
 		// Detect using the standard SURF feature descriptor and describer
 		DetectDescribePoint<T, BrightFeature> detDesc = FactoryDetectDescribe
-				.surfStable(new ConfigFastHessian(1, 2, 500, 1, 9, 4, 4), null, null, imageType);
+				.surfStable(new ConfigFastHessian(1, 2, 1000, 1, 9, 4, 4), null, null, imageType);
 //		DetectDescribePoint<T, BrightFeature> detDesc = FactoryDetectDescribe
 //			.sift(new ConfigCompleteSift(-1, 5, 5000));
 		ScoreAssociation<BrightFeature> scorer = FactoryAssociation.scoreEuclidean(BrightFeature.class, true);
@@ -67,8 +70,12 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 //		 ModelMatcher<Homography2D_F64,AssociatedPair> modelMatcher =
 //		 FactoryMultiViewRobust.homographyLMedS(null, new
 //		 ConfigLMedS(1000,3000));
+		System.out.println("inicializacia :" +(System.currentTimeMillis()-time));
+		time = System.currentTimeMillis();
 
 		List<DescribedImage> describedImages = computeDescriptions(images, detDesc);
+		System.out.println("pociatocna descripcia :" +(System.currentTimeMillis()-time));
+		time = System.currentTimeMillis();
 		DescribedImage main = describedImages.remove(0);
 
 		int bestNumberOfMatches = 0;
@@ -89,6 +96,8 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 					matches = cloneMatchesFromAssociater(associate);
 				}
 			}
+			System.out.println("hladanie najlepsieho obrazka na spoj :" +(System.currentTimeMillis()-time));
+			time = System.currentTimeMillis();
 
 			bestImageToConnect = describedImages.remove(indexOfBestImageToConnect);
 			List<AssociatedPair> pairs = new ArrayList<>();
@@ -100,13 +109,19 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 
 				pairs.add(new AssociatedPair(a, b, false));
 			}
+			System.out.println("tvorba parov z matchov :" +(System.currentTimeMillis()-time));
+			time = System.currentTimeMillis();
 			matches.reset();
 			// find the best fit model to describe the change between these
 			// images
 			if (!modelMatcher.process(pairs))
 				throw new RuntimeException("Model Matcher failed!");
 			Homography2D_F64 homografia = modelMatcher.getModelParameters().copy();
+			System.out.println("najdenie homografie :" +(System.currentTimeMillis()-time));
+			time = System.currentTimeMillis();
 			connect(main, bestImageToConnect, homografia, imageType);
+			System.out.println("vykreslenie :" +(System.currentTimeMillis()-time));
+			time = System.currentTimeMillis();
 		}
 
 		return main.colorImage;
