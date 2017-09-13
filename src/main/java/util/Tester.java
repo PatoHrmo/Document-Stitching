@@ -83,9 +83,9 @@ public class Tester {
 				stitchPicturesInFolder(helpFile);
 				System.out.println("obrazky v priecinku boli pospajane");
 				System.out.println("idem porovnat grandTruth so spojenym obrazkom");
-				double quality = compareStitchedWithGrandTruth(helpFile);
-				qualitySum += quality;
-				System.out.println("spajanie je na "+quality*100+"% presné");
+				//double quality = compareStitchedWithGrandTruth(helpFile);
+				//qualitySum += quality;
+				//System.out.println("spajanie je na "+quality*100+"% presné");
 				System.out.println("spajanie trvalo "+casPoslednehoSpoju+" miliskund");
 				celkomCas+= casPoslednehoSpoju;
 				System.out.println();
