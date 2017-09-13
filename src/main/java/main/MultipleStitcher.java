@@ -47,16 +47,15 @@ import net.coobird.thumbnailator.Thumbnails;
 
 public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 
-	public BufferedImage stitch(List<BufferedImage> images, Class<T> imageType,
-			int cielovaVelkostPismaVPixloch) {
+	public BufferedImage stitch(List<BufferedImage> images, int cielovaVelkostPismaVPixloch) {
 		
 		// zmen velkost obrazkov tak, aby na nich boli priblizne rovnako velke pismenka
 		images = resize(images, cielovaVelkostPismaVPixloch);
 		
 		
 		// Detect using the standard SURF feature descriptor and describer
-		DetectDescribePoint<T, BrightFeature> detDesc = FactoryDetectDescribe
-				.surfStable(new ConfigFastHessian(1, 2, 1500, 1, 9, 4, 4), null, null, imageType);
+		DetectDescribePoint<GrayF32, BrightFeature> detDesc = FactoryDetectDescribe
+				.surfStable(new ConfigFastHessian(1, 2, 1500, 1, 9, 4, 4), null, null, GrayF32.class);
 //		DetectDescribePoint<T, BrightFeature> detDesc = FactoryDetectDescribe
 //			.sift(new ConfigCompleteSift(-1, 5, 5000));
 		ScoreAssociation<BrightFeature> scorer = FactoryAssociation.scoreEuclidean(BrightFeature.class, true);
@@ -113,7 +112,7 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 				throw new RuntimeException("Model Matcher failed!");
 			Homography2D_F64 homografia = modelMatcher.getModelParameters().copy();
 			
-			connect(main, bestImageToConnect, homografia, imageType);
+			connect(main, bestImageToConnect, homografia);
 			
 		}
 
@@ -156,8 +155,7 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 
 	}
 
-	private void connect(DescribedImage main, DescribedImage bestImageToConnect, Homography2D_F64 fromAtoB,
-			Class<T> imageType) {
+	private void connect(DescribedImage main, DescribedImage bestImageToConnect, Homography2D_F64 fromAtoB) {
 		// specify size of output image
 		double scale = 1;
 		// BufferedImage bufA = ConvertBufferedImage.convertTo(main.image, null,
@@ -205,9 +203,10 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 
 	private int[] getSizeOfStitchedImage(GrayF32 image, GrayF32 image2, Homography2D_F64 fromBtoA) {
 		/*
-		 * dimension[0] = width of output, dimension[1] = height of output image
-		 * dimension[2] = shift right in homografy, dimension[3] = shift down in
-		 * homografy
+		 * dimension[0] = width of output
+ 		 * dimension[1] = height of output image
+		 * dimension[2] = shift right in homografy
+         * dimension[3] = shift down in homografy
 		 */
 		int[] dimension = new int[4];
 		Homography2D_F64 fromAtoB = new Homography2D_F64();

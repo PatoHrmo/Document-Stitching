@@ -60,7 +60,7 @@ public class Tester {
 		System.gc();
 		System.out.println("chystam sa spojit " + obrazky.size() + " obrazkov");
 		long casPredSpajanim = System.currentTimeMillis();
-		BufferedImage stitched = stitcher.stitch(obrazky, GrayF32.class,10);
+		BufferedImage stitched = stitcher.stitch(obrazky, 10);
 		casPoslednehoSpoju = System.currentTimeMillis()-casPredSpajanim;
 		UtilImageIO.saveImage(stitched, folderWithPictures.getPath() + "/stitched.jpg");
 		return stitched;
