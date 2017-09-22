@@ -21,6 +21,7 @@ import boofcv.alg.distort.PixelTransformHomography_F32;
 import boofcv.alg.distort.impl.DistortSupport;
 import boofcv.alg.interpolate.InterpolatePixelS;
 import boofcv.core.image.border.BorderType;
+import boofcv.factory.distort.FactoryDistort;
 import boofcv.factory.feature.associate.FactoryAssociation;
 import boofcv.factory.feature.dense.ConfigDenseHoG;
 import boofcv.factory.feature.dense.FactoryDescribeImageDense;
@@ -37,6 +38,7 @@ import boofcv.struct.feature.BrightFeature;
 import boofcv.struct.feature.TupleDesc;
 import boofcv.struct.geo.AssociatedPair;
 import boofcv.struct.image.GrayF32;
+import boofcv.struct.image.ImageBase;
 import boofcv.struct.image.ImageGray;
 import boofcv.struct.image.Planar;
 import georegression.struct.homography.Homography2D_F64;
@@ -115,8 +117,9 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 			connect(main, bestImageToConnect, homografia);
 			
 		}
-
-		return main.colorImage;
+		BufferedImage output = new BufferedImage(main.colorImage.width, main.colorImage.height,BufferedImage.TYPE_INT_RGB);
+		ConvertBufferedImage.convertTo(main.colorImage, output, true);
+		return output;
 	}
 
 	private List<BufferedImage> resize(List<BufferedImage> images, int cielovaVelkostPismaVPixloch) {
@@ -163,45 +166,60 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 		// BufferedImage bufB =
 		// ConvertBufferedImage.convertTo(bestImageToConnect.image, null, true);
 		// Convert into a BoofCV color format
-		Planar<GrayF32> colorA = ConvertBufferedImage.convertFromMulti(main.colorImage, null, true, GrayF32.class);
-		Planar<GrayF32> colorB = ConvertBufferedImage.convertFromMulti(bestImageToConnect.colorImage, null, true,
-				GrayF32.class);
+		Planar<GrayF32> colorA = main.colorImage;
+		Planar<GrayF32> colorB = bestImageToConnect.colorImage;
+		GrayF32 greyA = main.image;
+		GrayF32 greyB = bestImageToConnect.image;
 		// for meaning of numbers in this array - check function
 		// getSizeOfStitchedImage
-		int sizeOfOutputImage[] = getSizeOfStitchedImage(main.image, bestImageToConnect.image, fromAtoB);
+		int sizeOfOutputColorImage[] = getSizeOfStitchedImage(main.colorImage, bestImageToConnect.colorImage, fromAtoB);
+		int sizeOfOutputGrayImage[] = getSizeOfStitchedImage(main.colorImage, bestImageToConnect.colorImage, fromAtoB);
 		// Where the output images are rendered into
-		Planar<GrayF32> work = colorA.createNew(sizeOfOutputImage[0], sizeOfOutputImage[1]);
-
+		Planar<GrayF32> connectedColor = colorA.createNew(sizeOfOutputColorImage[0], sizeOfOutputColorImage[1]);
+		GrayF32 connectedGrey = greyA.createNew(sizeOfOutputGrayImage[0], sizeOfOutputGrayImage[1]);
 		// Adjust the transform so that the whole image can appear inside of it
-		Homography2D_F64 fromAToWork = new Homography2D_F64(scale, 0, sizeOfOutputImage[2], 0, scale,
-				sizeOfOutputImage[3], 0, 0, 1);
-		Homography2D_F64 fromWorkToA = fromAToWork.invert(null);
+		Homography2D_F64 fromAToWorkColor = new Homography2D_F64(scale, 0, sizeOfOutputColorImage[2], 0, scale,
+				sizeOfOutputColorImage[3], 0, 0, 1);
+		Homography2D_F64 fromWorkToAColor = fromAToWorkColor.invert(null);
+		
+		Homography2D_F64 fromAToWorkGray = new Homography2D_F64(scale, 0, sizeOfOutputGrayImage[2], 0, scale,
+				sizeOfOutputGrayImage[3], 0, 0, 1);
+		Homography2D_F64 fromWorkToAGray = fromAToWorkGray.invert(null);
 
 		// Used to render the results onto an image
 		PixelTransformHomography_F32 model = new PixelTransformHomography_F32();
 		InterpolatePixelS<GrayF32> interp = FactoryInterpolation.bilinearPixelS(GrayF32.class, BorderType.ZERO);
-		ImageDistort<Planar<GrayF32>, Planar<GrayF32>> distort = DistortSupport.createDistortPL(GrayF32.class, model,
+		ImageDistort<Planar<GrayF32>, Planar<GrayF32>> distortColor = DistortSupport.createDistortPL(GrayF32.class, model,
 				interp, false);
-		distort.setRenderAll(false);
+		// asi nie dobre
+		ImageDistort<GrayF32, GrayF32> distortGray = FactoryDistort.distortSB(false, interp, GrayF32.class);
+		distortGray.setModel(model);
+		
+		
+		
+		distortColor.setRenderAll(false);
+		distortGray.setRenderAll(false);
 		// Render first image
-		model.set(fromWorkToA);
-		distort.apply(colorA, work);
-	
+		
+		model.set(fromWorkToAColor);
+		distortColor.apply(colorA, connectedColor);
+		distortGray.apply(greyA, connectedGrey);
 		// Render second image
-		Homography2D_F64 fromWorkToB = fromWorkToA.concat(fromAtoB, null);
-		model.set(fromWorkToB);
-		distort.apply(colorB, work);
-
+		Homography2D_F64 fromWorkToBColor = fromWorkToAColor.concat(fromAtoB, null);
+		Homography2D_F64 fromWorkToBGray = fromWorkToAColor.concat(fromAtoB, null);
+		model.set(fromWorkToBColor);
+		distortColor.apply(colorB, connectedColor);
+		distortGray.apply(greyB, connectedGrey);
 		// Convert the rendered image into a BufferedImage
-		BufferedImage output = new BufferedImage(work.width, work.height, main.colorImage.getType());
-		ConvertBufferedImage.convertTo(work, output, true);
-		GrayF32 stitchedImage = ConvertBufferedImage.convertFromSingle(output, null, GrayF32.class);
-		main.image = stitchedImage;
-		main.colorImage = output;
+		//BufferedImage output = new BufferedImage(connectedColor.width, connectedColor.height,BufferedImage.TYPE_INT_RGB);
+		//ConvertBufferedImage.convertTo(connectedColor, output, true);
+		//GrayF32 stitchedImage = ConvertBufferedImage.convertFromSingle(output, null, GrayF32.class);
+		main.image = connectedGrey.clone();
+		main.colorImage = connectedColor.clone();
 		main.describe();
 	}
 
-	private int[] getSizeOfStitchedImage(GrayF32 image, GrayF32 image2, Homography2D_F64 fromBtoA) {
+	private int[] getSizeOfStitchedImage(ImageBase image, ImageBase image2, Homography2D_F64 fromBtoA) {
 		/*
 		 * dimension[0] = width of output
  		 * dimension[1] = height of output image
@@ -276,18 +294,18 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 	}
 
 	private class DescribedImage {
-		BufferedImage colorImage;
+		Planar<GrayF32> colorImage;
 		GrayF32 image;
 		FastQueue<BrightFeature> desc;
 		List<Point2D_F64> points;
 		DetectDescribePoint<GrayF32, BrightFeature> detDesc;
 		
-		public DescribedImage(BufferedImage color, DetectDescribePoint<GrayF32, BrightFeature> detDesc) {
-			this.image = ConvertBufferedImage.convertFromSingle(color, null, GrayF32.class);
+		public DescribedImage(BufferedImage image, BufferedImage reducedImage, DetectDescribePoint<GrayF32, BrightFeature> detDesc) {
+			this.image = ConvertBufferedImage.convertFromSingle(reducedImage, null, GrayF32.class);
 			this.desc = UtilFeature.createQueue(detDesc, 100);
 			this.points = new ArrayList<Point2D_F64>();
 			this.detDesc = detDesc;
-			this.colorImage = color;
+			this.colorImage = ConvertBufferedImage.convertFromMulti(image, null, true, GrayF32.class);
 		}
 
 		/**
