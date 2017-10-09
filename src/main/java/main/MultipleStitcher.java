@@ -15,6 +15,7 @@ import boofcv.abst.feature.detdesc.ConfigCompleteSift;
 import boofcv.abst.feature.detdesc.DetectDescribePoint;
 import boofcv.abst.feature.detect.interest.ConfigFastHessian;
 import boofcv.abst.feature.detect.interest.ConfigGeneralDetector;
+import boofcv.alg.color.ColorRgb;
 import boofcv.alg.descriptor.UtilFeature;
 import boofcv.alg.distort.ImageDistort;
 import boofcv.alg.distort.PixelTransformHomography_F32;
@@ -52,7 +53,7 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 	public BufferedImage stitch(List<BufferedImage> images, int cielovaVelkostPismaVPixloch) {
 		
 		// zmen velkost obrazkov tak, aby na nich boli priblizne rovnako velke pismenka
-		images = resize(images, cielovaVelkostPismaVPixloch);
+		List<BufferedImage> resizedImages = resize(images, cielovaVelkostPismaVPixloch);
 		
 		
 		// Detect using the standard SURF feature descriptor and describer
@@ -72,7 +73,7 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 //		 ConfigLMedS(1000,3000));
 		
 
-		List<DescribedImage> describedImages = computeDescriptions(images, detDesc);
+		List<DescribedImage> describedImages = computeDescriptions(resizedImages,resizedImages, detDesc);
 		
 		DescribedImage main = describedImages.remove(0);
 
@@ -173,7 +174,7 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 		// for meaning of numbers in this array - check function
 		// getSizeOfStitchedImage
 		int sizeOfOutputColorImage[] = getSizeOfStitchedImage(main.colorImage, bestImageToConnect.colorImage, fromAtoB);
-		int sizeOfOutputGrayImage[] = getSizeOfStitchedImage(main.colorImage, bestImageToConnect.colorImage, fromAtoB);
+		int sizeOfOutputGrayImage[] = getSizeOfStitchedImage(main.image, bestImageToConnect.image, fromAtoB);
 		// Where the output images are rendered into
 		Planar<GrayF32> connectedColor = colorA.createNew(sizeOfOutputColorImage[0], sizeOfOutputColorImage[1]);
 		GrayF32 connectedGrey = greyA.createNew(sizeOfOutputGrayImage[0], sizeOfOutputGrayImage[1]);
@@ -185,15 +186,16 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 		Homography2D_F64 fromAToWorkGray = new Homography2D_F64(scale, 0, sizeOfOutputGrayImage[2], 0, scale,
 				sizeOfOutputGrayImage[3], 0, 0, 1);
 		Homography2D_F64 fromWorkToAGray = fromAToWorkGray.invert(null);
-
 		// Used to render the results onto an image
-		PixelTransformHomography_F32 model = new PixelTransformHomography_F32();
+		PixelTransformHomography_F32 modelGray = new PixelTransformHomography_F32();
+		PixelTransformHomography_F32 modelColor = new PixelTransformHomography_F32();
 		InterpolatePixelS<GrayF32> interp = FactoryInterpolation.bilinearPixelS(GrayF32.class, BorderType.ZERO);
-		ImageDistort<Planar<GrayF32>, Planar<GrayF32>> distortColor = DistortSupport.createDistortPL(GrayF32.class, model,
+		InterpolatePixelS<GrayF32> interq = FactoryInterpolation.bilinearPixelS(GrayF32.class, BorderType.ZERO);
+		ImageDistort<Planar<GrayF32>, Planar<GrayF32>> distortColor = DistortSupport.createDistortPL(GrayF32.class, modelColor,
 				interp, false);
 		// asi nie dobre
-		ImageDistort<GrayF32, GrayF32> distortGray = FactoryDistort.distortSB(false, interp, GrayF32.class);
-		distortGray.setModel(model);
+		ImageDistort<GrayF32, GrayF32> distortGray = FactoryDistort.distortSB(false, interq, GrayF32.class);
+		distortGray.setModel(modelGray);
 		
 		
 		
@@ -201,21 +203,27 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 		distortGray.setRenderAll(false);
 		// Render first image
 		
-		model.set(fromWorkToAColor);
+		modelColor.set(fromWorkToAGray);
 		distortColor.apply(colorA, connectedColor);
+		
+		modelGray.set(fromWorkToAGray);
 		distortGray.apply(greyA, connectedGrey);
 		// Render second image
+		Homography2D_F64 fromWorkToBGray = fromWorkToAGray.concat(fromAtoB, null);
+		
 		Homography2D_F64 fromWorkToBColor = fromWorkToAColor.concat(fromAtoB, null);
-		Homography2D_F64 fromWorkToBGray = fromWorkToAColor.concat(fromAtoB, null);
-		model.set(fromWorkToBColor);
+		modelColor.set(fromWorkToBGray);
 		distortColor.apply(colorB, connectedColor);
+		modelGray.set(fromWorkToBGray);
+		System.out.println(fromWorkToBColor.toString()+System.lineSeparator()+fromWorkToBGray.toString());
 		distortGray.apply(greyB, connectedGrey);
 		// Convert the rendered image into a BufferedImage
 		//BufferedImage output = new BufferedImage(connectedColor.width, connectedColor.height,BufferedImage.TYPE_INT_RGB);
 		//ConvertBufferedImage.convertTo(connectedColor, output, true);
 		//GrayF32 stitchedImage = ConvertBufferedImage.convertFromSingle(output, null, GrayF32.class);
-		main.image = connectedGrey.clone();
 		main.colorImage = connectedColor.clone();
+		main.image = new GrayF32(main.colorImage.width, main.colorImage.height);
+		ColorRgb.rgbToGray_Weighted_F32(main.colorImage, main.image);
 		main.describe();
 	}
 
@@ -275,12 +283,12 @@ public class MultipleStitcher<T extends ImageGray, FD extends TupleDesc> {
 		return dimension;
 	}
 
-	private List<DescribedImage> computeDescriptions(List<BufferedImage> inputImages, DetectDescribePoint detDesc) {
+	private List<DescribedImage> computeDescriptions(List<BufferedImage> inputImages, List<BufferedImage> resizedImages, DetectDescribePoint detDesc) {
 
 		List<DescribedImage> descImages = new LinkedList<>();
 
-		for (BufferedImage im : inputImages) {
-			DescribedImage descImg = new DescribedImage(im, detDesc);
+		for (int i = 0; i< inputImages.size();i++) {
+			DescribedImage descImg = new DescribedImage(inputImages.get(i),resizedImages.get(i), detDesc);
 			descImg.describe();
 			descImages.add(descImg);
 		}
