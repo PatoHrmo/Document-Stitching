@@ -20,7 +20,7 @@ import net.sourceforge.tess4j.Tesseract;
 import net.sourceforge.tess4j.TesseractException;
 
 public class Tester {
-	private MultipleStitcher<GrayF32, TupleDesc> stitcher;
+	private MultipleStitcher stitcher;
 	private String nameOfFolder;
 	private NormalizedLevenshtein levenstien;
 	private ITesseract tesseractOcr;
@@ -35,7 +35,7 @@ public class Tester {
 	 *            images(one of this images need to be named grandTruth.jpg)
 	 */
 	public Tester(String nameOfFolder) {
-		stitcher = new MultipleStitcher<>();
+		stitcher = new MultipleStitcher();
 		this.nameOfFolder = nameOfFolder;
 		levenstien = new NormalizedLevenshtein();
 		tesseractOcr = new Tesseract();
