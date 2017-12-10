@@ -60,43 +60,43 @@ public class MultipleStitcher {
 				.surfStable(new ConfigFastHessian(1, 2, 1500, 1, 9, 4, 4), null, null, GrayF32.class);
 		scorer = FactoryAssociation.scoreEuclidean(BrightFeature.class, true);
 		associate = FactoryAssociation.greedy(scorer, Double.MAX_VALUE, true);
-		modelMatcher = FactoryMultiViewRobust.homographyRansac(null,
-				new ConfigRansac(3000, 1));
     }
     
 	public BufferedImage stitch(List<BufferedImage> images, int cielovaVelkostPismaVPixloch) {
 		
-		List<DescribedImage> describedImages = computeDescriptions(images, detDesc);
+		modelMatcher = FactoryMultiViewRobust.homographyRansac(null,
+				new ConfigRansac(3000, 1));
+		DescribedImage mainImage = new DescribedImage(images.remove(0), detDesc);
+		List<DescribedImage> imagesToStitch = computeDescriptions(images, detDesc);
 		
-		DescribedImage main = describedImages.remove(0);
-
 		int bestNumberOfMatches = 0;
-		DescribedImage bestImageToConnect;
-		FastQueue<AssociatedIndex> matches = new FastQueue<>(1000, AssociatedIndex.class, true);
-		int indexOfBestImageToConnect = 0;
-		while (!describedImages.isEmpty()) {
-
+		DescribedImage bestImageToStitch;
+		
+		FastQueue<AssociatedIndex> matches = new FastQueue<>(AssociatedIndex.class, true);
+		int indexOfBestImageToStitch = 0;
+		while (!imagesToStitch.isEmpty()) {
+			mainImage.describe();
 			bestNumberOfMatches = 0;
-			for (int i = 0; i < describedImages.size(); i++) {
-				associate.setSource(main.desc);
-				associate.setDestination(describedImages.get(i).desc);
+			for (int i = 0; i < imagesToStitch.size(); i++) {
+				associate.setSource(mainImage.description);
+				associate.setDestination(imagesToStitch.get(i).description);
 				associate.associate();
 
 				if (associate.getMatches().size > bestNumberOfMatches) {
 					bestNumberOfMatches = associate.getMatches().size;
-					indexOfBestImageToConnect = i;
-					matches = cloneMatchesFromAssociater(associate);
+					indexOfBestImageToStitch = i;
+					matches = cloneMatchesFromAssociate();
 				}
 			}
 			
 
-			bestImageToConnect = describedImages.remove(indexOfBestImageToConnect);
+			bestImageToStitch = imagesToStitch.remove(indexOfBestImageToStitch);
 			List<AssociatedPair> pairs = new ArrayList<>();
 
 			for (int i = 0; i < matches.size(); i++) {
 				AssociatedIndex match = matches.get(i);
-				Point2D_F64 a = main.points.get(match.src);
-				Point2D_F64 b = bestImageToConnect.points.get(match.dst);
+				Point2D_F64 a = mainImage.locationsOfFeaturePoints.get(match.src);
+				Point2D_F64 b = bestImageToStitch.locationsOfFeaturePoints.get(match.dst);
 
 				pairs.add(new AssociatedPair(a, b, false));
 			}
@@ -108,15 +108,15 @@ public class MultipleStitcher {
 				throw new RuntimeException("Model Matcher failed!");
 			Homography2D_F64 homografia = modelMatcher.getModelParameters().copy();
 			
-			connect(main, bestImageToConnect, homografia);
+			connect(mainImage, bestImageToStitch, homografia);
 			
 		}
-		BufferedImage output = new BufferedImage(main.colorImage.width, main.colorImage.height,BufferedImage.TYPE_INT_RGB);
-		ConvertBufferedImage.convertTo(main.colorImage, output, true);
+		BufferedImage output = new BufferedImage(mainImage.colorImage.width, mainImage.colorImage.height,BufferedImage.TYPE_INT_RGB);
+		ConvertBufferedImage.convertTo(mainImage.colorImage, output, true);
 		return output;
 	}
 
-	private FastQueue<AssociatedIndex> cloneMatchesFromAssociater(AssociateDescription<BrightFeature> associate) {
+	private FastQueue<AssociatedIndex> cloneMatchesFromAssociate() {
 		int numberOfMatches = associate.getMatches().getSize();
 		FastQueue<AssociatedIndex> matches = new FastQueue<>(numberOfMatches, AssociatedIndex.class, true);
 		matches.size = numberOfMatches;
@@ -128,68 +128,41 @@ public class MultipleStitcher {
 	}
 
 	private void connect(DescribedImage main, DescribedImage bestImageToConnect, Homography2D_F64 fromAtoB) {
-		// specify size of output image
+		
 		double scale = 1;
-		// BufferedImage bufA = ConvertBufferedImage.convertTo(main.image, null,
-		// true);
-		// BufferedImage bufB =
-		// ConvertBufferedImage.convertTo(bestImageToConnect.image, null, true);
-		// Convert into a BoofCV color format
+		
 		Planar<GrayF32> colorA = main.colorImage;
 		Planar<GrayF32> colorB = bestImageToConnect.colorImage;
-		// for meaning of numbers in this array - check function
-		// getSizeOfStitchedImage
-		int sizeOfOutputColorImage[] = getSizeOfStitchedImage(main.colorImage, bestImageToConnect.colorImage, fromAtoB);
+		
+		StitchedPictureSize sizeOfOutputColorImage = getSizeOfStitchedImage(main.colorImage, bestImageToConnect.colorImage, fromAtoB);
 		// Where the output images are rendered into
-		Planar<GrayF32> connectedColor = colorA.createNew(sizeOfOutputColorImage[0], sizeOfOutputColorImage[1]);
+		Planar<GrayF32> connectedColor = colorA.createNew(sizeOfOutputColorImage.getWidthOfOutputImage(),
+				sizeOfOutputColorImage.getHeightOfOutputImage());
 		// Adjust the transform so that the whole image can appear inside of it
-		Homography2D_F64 fromAToWorkColor = new Homography2D_F64(scale, 0, sizeOfOutputColorImage[2], 0, scale,
-				sizeOfOutputColorImage[3], 0, 0, 1);
+		Homography2D_F64 fromAToWorkColor = new Homography2D_F64(scale, 0, sizeOfOutputColorImage.getShiftRight(),0, scale,
+				sizeOfOutputColorImage.getShiftDown(), 0, 0, 1);
 		Homography2D_F64 fromWorkToAColor = fromAToWorkColor.invert(null);
-		
-		
 		// Used to render the results onto an image
-		
 		PixelTransformHomography_F32 modelColor = new PixelTransformHomography_F32();
 		InterpolatePixelS<GrayF32> interp = FactoryInterpolation.bilinearPixelS(GrayF32.class, BorderType.ZERO);
 		ImageDistort<Planar<GrayF32>, Planar<GrayF32>> distortColor = DistortSupport.createDistortPL(GrayF32.class, modelColor,
 				interp, false);
-		// asi nie dobre
-		
-		
-		
 		distortColor.setRenderAll(false);
-		
 		// Render first image
-		
 		modelColor.set(fromWorkToAColor);
 		distortColor.apply(colorA, connectedColor);
-		
-		
 		// Render second image
-		
 		Homography2D_F64 fromWorkToBColor = fromWorkToAColor.concat(fromAtoB, null);
 		modelColor.set(fromWorkToBColor);
 		distortColor.apply(colorB, connectedColor);
-		
-		// Convert the rendered image into a BufferedImage
-		//BufferedImage output = new BufferedImage(connectedColor.width, connectedColor.height,BufferedImage.TYPE_INT_RGB);
-		//ConvertBufferedImage.convertTo(connectedColor, output, true);
-		//GrayF32 stitchedImage = ConvertBufferedImage.convertFromSingle(output, null, GrayF32.class);
 		main.colorImage = connectedColor;
-		main.image = new GrayF32(main.colorImage.width, main.colorImage.height);
-		ColorRgb.rgbToGray_Weighted_F32(main.colorImage, main.image);
-		main.describe();
+		main.grayImage = new GrayF32(main.colorImage.width, main.colorImage.height);
+		ColorRgb.rgbToGray_Weighted_F32(main.colorImage, main.grayImage);
 	}
 
-	private int[] getSizeOfStitchedImage(ImageBase image, ImageBase image2, Homography2D_F64 fromBtoA) {
-		/*
-		 * dimension[0] = width of output
- 		 * dimension[1] = height of output image
-		 * dimension[2] = shift right in homografy
-         * dimension[3] = shift down in homografy
-		 */
-		int[] dimension = new int[4];
+	private StitchedPictureSize getSizeOfStitchedImage(ImageBase image, ImageBase image2, Homography2D_F64 fromBtoA) {
+		
+		StitchedPictureSize pictureSize = new StitchedPictureSize();
 		Homography2D_F64 fromAtoB = new Homography2D_F64();
 		fromBtoA.invert(fromAtoB);
 
@@ -231,19 +204,20 @@ public class MultipleStitcher {
 			}
 		}
 
-		dimension[0] = maxRight.x - maxLeft.x;
-		dimension[1] = maxBottom.y - maxTop.y;
-		dimension[2] = -maxLeft.x;
-		dimension[3] = -maxTop.y;
-		return dimension;
+		
+		pictureSize.setHeightOfOutputImage(maxBottom.y - maxTop.y);
+		pictureSize.setWidthOfOutputImage(maxRight.x - maxLeft.x);
+		pictureSize.setShiftRight(-maxLeft.x);
+		pictureSize.setShiftDown(-maxTop.y);
+		return pictureSize;
 	}
 
-	private List<DescribedImage> computeDescriptions(List<BufferedImage> inputImages,  DetectDescribePoint detDesc) {
+	private List<DescribedImage> computeDescriptions(List<BufferedImage> inputImages,  DetectDescribePoint detectDescriptor) {
 
 		List<DescribedImage> descImages = new LinkedList<>();
 
 		for (int i = 0; i< inputImages.size();i++) {
-			DescribedImage descImg = new DescribedImage(inputImages.get(i), detDesc);
+			DescribedImage descImg = new DescribedImage(inputImages.get(i), detectDescriptor);
 			descImg.describe();
 			descImages.add(descImg);
 		}
@@ -256,32 +230,5 @@ public class MultipleStitcher {
 		return new Point2D_I32((int) result.x, (int) result.y);
 	}
 
-	private class DescribedImage {
-		Planar<GrayF32> colorImage;
-		GrayF32 image;
-		FastQueue<BrightFeature> desc;
-		List<Point2D_F64> points;
-		DetectDescribePoint<GrayF32, BrightFeature> detDesc;
-		
-		public DescribedImage(BufferedImage image,  DetectDescribePoint<GrayF32, BrightFeature> detDesc) {
-			this.image = ConvertBufferedImage.convertFromSingle(image, null, GrayF32.class);
-			this.desc = UtilFeature.createQueue(detDesc, 100);
-			this.points = new ArrayList<Point2D_F64>();
-			this.detDesc = detDesc;
-			this.colorImage = ConvertBufferedImage.convertFromMulti(image, null, true, GrayF32.class);
-		}
-
-		/**
-		 * describes image in this instance using detect descriptor
-		 */
-		public void describe() {
-			detDesc.detect(image);
-			desc.reset();
-			points.clear();
-			for (int i = 0; i < detDesc.getNumberOfFeatures(); i++) {
-				points.add(detDesc.getLocation(i).copy());
-				desc.grow().setTo(detDesc.getDescription(i));
-			}
-		}
-	}
+	
 }
