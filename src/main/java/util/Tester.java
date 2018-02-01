@@ -10,14 +10,13 @@ import java.util.List;
 import java.util.Stack;
 
 import boofcv.io.image.UtilImageIO;
-import boofcv.struct.feature.TupleDesc;
-import boofcv.struct.image.GrayF32;
-import ch.qos.logback.core.net.SyslogOutputStream;
 import info.debatty.java.stringsimilarity.NormalizedLevenshtein;
 import main.MultipleStitcher;
 import net.sourceforge.tess4j.ITesseract;
 import net.sourceforge.tess4j.Tesseract;
+import net.sourceforge.tess4j.Tesseract1;
 import net.sourceforge.tess4j.TesseractException;
+
 
 public class Tester {
 	private MultipleStitcher stitcher;
@@ -83,9 +82,9 @@ public class Tester {
 				stitchPicturesInFolder(helpFile);
 				System.out.println("obrazky v priecinku boli pospajane");
 				System.out.println("idem porovnat grandTruth so spojenym obrazkom");
-				//double quality = compareStitchedWithGrandTruth(helpFile);
-				//qualitySum += quality;
-				//System.out.println("spajanie je na "+quality*100+"% presné");
+				double quality = compareStitchedWithGrandTruth(helpFile);
+				qualitySum += quality;
+				System.out.println("spajanie je na "+quality*100+"% presné");
 				System.out.println("spajanie trvalo "+casPoslednehoSpoju+" miliskund");
 				celkomCas+= casPoslednehoSpoju;
 				System.out.println();

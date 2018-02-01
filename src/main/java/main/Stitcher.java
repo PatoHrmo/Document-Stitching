@@ -45,6 +45,7 @@ public class Stitcher {
 	 * Using abstracted code, find a transform which minimizes the difference between corresponding features
 	 * in both images.  This code is completely model independent and is the core algorithms.
 	 */
+	
 	public static<T extends ImageGray, FD extends TupleDesc> Homography2D_F64
 	computeTransform( T imageA , T imageB ,
 					  DetectDescribePoint<T,FD> detDesc ,
