@@ -7,6 +7,7 @@ import java.util.List;
 import org.ddogleg.struct.FastQueue;
 
 import boofcv.abst.feature.detdesc.DetectDescribePoint;
+import boofcv.alg.color.ColorRgb;
 import boofcv.alg.descriptor.UtilFeature;
 import boofcv.io.image.ConvertBufferedImage;
 import boofcv.struct.feature.BrightFeature;
@@ -21,12 +22,14 @@ public class DescribedImage {
 	List<Point2D_F64> locationsOfFeaturePoints;
 	DetectDescribePoint<GrayF32, BrightFeature> detectDescriptor;
 	
-	public DescribedImage(BufferedImage image,  DetectDescribePoint<GrayF32, BrightFeature> detectDescriptor) {
-		this.grayImage = ConvertBufferedImage.convertFromSingle(image, null, GrayF32.class);
+	
+	public DescribedImage(Planar<GrayF32> image,  DetectDescribePoint<GrayF32, BrightFeature> detectDescriptor) {
+		this.colorImage = image;
+		this.grayImage = new GrayF32(image.width, image.height);
+		ColorRgb.rgbToGray_Weighted_F32(colorImage, grayImage);
 		this.description = UtilFeature.createQueue(detectDescriptor, 1500);
 		this.locationsOfFeaturePoints = new ArrayList<Point2D_F64>();
 		this.detectDescriptor = detectDescriptor;
-		this.colorImage = ConvertBufferedImage.convertFromMulti(image, null, true, GrayF32.class);
 	}
 
 	/**

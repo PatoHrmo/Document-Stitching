@@ -9,7 +9,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Stack;
 
+import boofcv.io.image.ConvertBufferedImage;
 import boofcv.io.image.UtilImageIO;
+import boofcv.struct.image.GrayF32;
+import boofcv.struct.image.Planar;
 import info.debatty.java.stringsimilarity.NormalizedLevenshtein;
 import main.MultipleStitcher;
 import net.sourceforge.tess4j.ITesseract;
@@ -49,20 +52,23 @@ public class Tester {
      * @return stitched image
      */
 	public BufferedImage stitchPicturesInFolder(File folderWithPictures) {
-		List<BufferedImage> obrazky = new ArrayList<>();
+		List<Planar<GrayF32>> obrazky = new ArrayList<>();
 		for (File obrazok : folderWithPictures.listFiles()) {
 			if (!(obrazok.getName().equals("stitched.jpg") || obrazok.getName().equals("grandTruth.jpg") ||
 					obrazok.getName().equals("stitched.jpg.txt") || obrazok.getName().equals("grandTruth.jpg.txt"))) {
-				obrazky.add(UtilImageIO.loadImage(obrazok.getPath()));
+				obrazky.add(ConvertBufferedImage.convertFromMulti(UtilImageIO.loadImage(obrazok.getPath())
+						,null,true,GrayF32.class));
 			}
 		}
 		System.gc();
 		System.out.println("chystam sa spojit " + obrazky.size() + " obrazkov");
 		long casPredSpajanim = System.currentTimeMillis();
-		BufferedImage stitched = stitcher.stitch(obrazky, 10);
+		Planar<GrayF32> stitchedOutput = stitcher.stitch(obrazky);
+		BufferedImage output = new BufferedImage(stitchedOutput.width, stitchedOutput.height,BufferedImage.TYPE_INT_RGB);
+		ConvertBufferedImage.convertTo(stitchedOutput, output, true);
 		casPoslednehoSpoju = System.currentTimeMillis()-casPredSpajanim;
-		UtilImageIO.saveImage(stitched, folderWithPictures.getPath() + "/stitched.jpg");
-		return stitched;
+		UtilImageIO.saveImage(output, folderWithPictures.getPath() + "/stitched.jpg");
+		return output;
 
 	}
 	/**
@@ -82,9 +88,9 @@ public class Tester {
 				stitchPicturesInFolder(helpFile);
 				System.out.println("obrazky v priecinku boli pospajane");
 				System.out.println("idem porovnat grandTruth so spojenym obrazkom");
-				double quality = compareStitchedWithGrandTruth(helpFile);
-				qualitySum += quality;
-				System.out.println("spajanie je na "+quality*100+"% presné");
+				//double quality = compareStitchedWithGrandTruth(helpFile);
+				//qualitySum += quality;
+				//System.out.println("spajanie je na "+quality*100+"% presné");
 				System.out.println("spajanie trvalo "+casPoslednehoSpoju+" miliskund");
 				celkomCas+= casPoslednehoSpoju;
 				System.out.println();

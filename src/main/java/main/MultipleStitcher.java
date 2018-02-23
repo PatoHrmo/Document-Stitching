@@ -62,7 +62,7 @@ public class MultipleStitcher {
 		associate = FactoryAssociation.greedy(scorer, Double.MAX_VALUE, true);
     }
     
-	public BufferedImage stitch(List<BufferedImage> images, int cielovaVelkostPismaVPixloch) {
+	public Planar<GrayF32> stitch(List<Planar<GrayF32>> images) {
 		
 		modelMatcher = FactoryMultiViewRobust.homographyRansac(null,
 				new ConfigRansac(3000, 1));
@@ -111,9 +111,8 @@ public class MultipleStitcher {
 			connect(mainImage, bestImageToStitch, homografia);
 			
 		}
-		BufferedImage output = new BufferedImage(mainImage.colorImage.width, mainImage.colorImage.height,BufferedImage.TYPE_INT_RGB);
-		ConvertBufferedImage.convertTo(mainImage.colorImage, output, true);
-		return output;
+		
+		return mainImage.colorImage;
 	}
 
 	private FastQueue<AssociatedIndex> cloneMatchesFromAssociate() {
@@ -212,7 +211,7 @@ public class MultipleStitcher {
 		return pictureSize;
 	}
 
-	private List<DescribedImage> computeDescriptions(List<BufferedImage> inputImages,  DetectDescribePoint detectDescriptor) {
+	private List<DescribedImage> computeDescriptions(List<Planar<GrayF32>> inputImages,  DetectDescribePoint detectDescriptor) {
 
 		List<DescribedImage> descImages = new LinkedList<>();
 
