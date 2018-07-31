@@ -5,6 +5,8 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Paths;
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Stack;
@@ -14,37 +16,32 @@ import boofcv.io.image.UtilImageIO;
 import boofcv.struct.image.GrayF32;
 import boofcv.struct.image.Planar;
 import info.debatty.java.stringsimilarity.NormalizedLevenshtein;
-import main.MultipleStitcher;
+import main.Stitcher;
 import net.sourceforge.tess4j.ITesseract;
 import net.sourceforge.tess4j.Tesseract;
-import net.sourceforge.tess4j.Tesseract1;
 import net.sourceforge.tess4j.TesseractException;
 
 
 public class Tester {
-	private MultipleStitcher stitcher;
-	private String nameOfFolder;
+	private Stitcher stitcher;
+	private String datasetFolder;
 	private NormalizedLevenshtein levenstien;
-	private ITesseract tesseractOcr;
-	private boolean saveTextFromOcr;
-	private long casPoslednehoSpoju;
+	private ITesseract tesseract;
+	private long lengthOfLastStitching;
 	/**
 	 * 
-	 * @param nameOfFolder
+	 * @param datasetFolder
 	 *            name of dataset folder. This folder can have multiple folders,
 	 *            however - only two types of folders are allowed - folders
 	 *            which contains only folders, and folders which contains only
-	 *            images(one of this images need to be named grandTruth.jpg)
+	 *            images and text document(containing grand truth string)
 	 */
-	public Tester(String nameOfFolder) {
-		stitcher = new MultipleStitcher();
-		this.nameOfFolder = nameOfFolder;
+	public Tester(Stitcher testingStitcher) {
+		this.stitcher = testingStitcher;
 		levenstien = new NormalizedLevenshtein();
-		tesseractOcr = new Tesseract();
-		this.saveTextFromOcr = true;
-		casPoslednehoSpoju = 0;
-
+		tesseract = new Tesseract();
 	}
+	
     /**
      * stitches all pictures in folder except those named grandTruth.jpg and stitched.jpg 
      * stitched picture will be saved in stitched.jpg in this folder
@@ -54,8 +51,8 @@ public class Tester {
 	public BufferedImage stitchPicturesInFolder(File folderWithPictures) {
 		List<Planar<GrayF32>> obrazky = new ArrayList<>();
 		for (File obrazok : folderWithPictures.listFiles()) {
-			if (!(obrazok.getName().equals("stitched.jpg") || obrazok.getName().equals("grandTruth.jpg") ||
-					obrazok.getName().equals("stitched.jpg.txt") || obrazok.getName().equals("grandTruth.jpg.txt"))) {
+			if (!(obrazok.getName().equals("stitched.jpg") || obrazok.getName().equals("stitched.jpg.txt")
+				|| obrazok.getName().equals("grandTruth.jpg.txt"))) {
 				obrazky.add(ConvertBufferedImage.convertFromMulti(UtilImageIO.loadImage(obrazok.getPath())
 						,null,true,GrayF32.class));
 			}
@@ -66,7 +63,7 @@ public class Tester {
 		Planar<GrayF32> stitchedOutput = stitcher.stitch(obrazky);
 		BufferedImage output = new BufferedImage(stitchedOutput.width, stitchedOutput.height,BufferedImage.TYPE_INT_RGB);
 		ConvertBufferedImage.convertTo(stitchedOutput, output, true);
-		casPoslednehoSpoju = System.currentTimeMillis()-casPredSpajanim;
+		lengthOfLastStitching = System.currentTimeMillis()-casPredSpajanim;
 		UtilImageIO.saveImage(output, folderWithPictures.getPath() + "/stitched.jpg");
 		return output;
 
@@ -75,10 +72,9 @@ public class Tester {
 	 * run tests within a specified folder (in constructor)
 	 */
 	public void runTests() {
-		File helpFile = new File(nameOfFolder);
-		double qualitySum = 0;
-		long celkomCas = 0;
-		int stitchedPicturesCount = 0;
+		File helpFile = new File(datasetFolder);
+		long stitchingTime = 0;
+		List<Double> results = new ArrayList<>();
 		Stack<File> files = new Stack<>();
 		files.add(helpFile);
 		while (!files.isEmpty()) {
@@ -89,22 +85,39 @@ public class Tester {
 				System.out.println("obrazky v priecinku boli pospajane");
 				System.out.println("idem porovnat grandTruth so spojenym obrazkom");
 				//double quality = compareStitchedWithGrandTruth(helpFile);
-				//qualitySum += quality;
+				//results.add(quality);
 				//System.out.println("spajanie je na "+quality*100+"% presné");
-				System.out.println("spajanie trvalo "+casPoslednehoSpoju+" miliskund");
-				celkomCas+= casPoslednehoSpoju;
+				System.out.println("spajanie trvalo "+lengthOfLastStitching+" miliskund");
+				stitchingTime+= lengthOfLastStitching;
 				System.out.println();
-				stitchedPicturesCount++;
 			} else {
 				for (File subFolder : helpFile.listFiles()) {
 					files.add(subFolder);
 				}
 			}
-
 		}
-		System.out.println("spájanie celého datasetu je na " + qualitySum * 100 / stitchedPicturesCount + "% presné");
-		System.out.println("spájanie datasetu trvalo "+celkomCas);
+		showTestResults(results, stitchingTime);
+		
 	}
+	private void showTestResults(List<Double> resultsOfQuality, long stitchingTime) {
+		int stitchedPicturesCount = resultsOfQuality.size();
+		double average = 0;
+		for(double result : resultsOfQuality) {
+			average +=result;
+		}
+		average = average*100 / stitchedPicturesCount;
+		double deviation = 0;
+		for(double result : resultsOfQuality) {
+			deviation +=Math.pow((result*100)-average, 2)/stitchedPicturesCount;
+		}
+		deviation = Math.sqrt(deviation);
+		NumberFormat formatter = new DecimalFormat("#0.00");  
+		System.out.println("spájanie celého datasetu je na " + formatter.format(average) + 
+				"% +- "+ formatter.format(deviation)+" presné");
+		System.out.println("spájanie priemerne trvalo "+stitchingTime/stitchedPicturesCount);
+		
+	}
+
 	/**
 	 * compares text from grantruth picture and stitched picture
 	 * @param helpFile file in which is stitched and grantruth picture
@@ -121,7 +134,6 @@ public class Tester {
 				byte[] znaky = Files.readAllBytes(Paths.get(helpFile.getPath() + "/grandTruth.jpg.txt"));
 				grandTruthString = new String(znaky);
 			} catch (IOException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 		} else {
@@ -137,19 +149,18 @@ public class Tester {
 	 */
 	private String doOcr(File stitchedPicture) {
 		try {
-			String text = tesseractOcr.doOCR(stitchedPicture);
-			if(saveTextFromOcr) {
-				Files.write(Paths.get(stitchedPicture.getPath()+".txt"), text.getBytes());
-			}
+			String text = tesseract.doOCR(stitchedPicture);
+			Files.write(Paths.get(stitchedPicture.getPath()+".txt"), text.getBytes());
 			return text;
 		} catch (TesseractException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 		return "";
+	}
+	public void setDatasetFolder(String folderName) {
+		this.datasetFolder  = folderName;
 	}
 
 }

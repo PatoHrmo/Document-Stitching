@@ -1,87 +1,80 @@
 package main;
 
-import java.awt.image.BufferedImage;
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 
 import org.ddogleg.fitting.modelset.ModelMatcher;
+import org.ddogleg.nn.FactoryNearestNeighbor;
 import org.ddogleg.struct.FastQueue;
 
 import boofcv.abst.feature.associate.AssociateDescription;
+import boofcv.abst.feature.associate.AssociateNearestNeighbor;
 import boofcv.abst.feature.associate.ScoreAssociation;
-import boofcv.abst.feature.detdesc.ConfigCompleteSift;
+import boofcv.abst.feature.associate.WrapAssociateSurfBasic;
 import boofcv.abst.feature.detdesc.DetectDescribePoint;
 import boofcv.abst.feature.detect.interest.ConfigFastHessian;
-import boofcv.abst.feature.detect.interest.ConfigGeneralDetector;
 import boofcv.alg.color.ColorRgb;
-import boofcv.alg.descriptor.UtilFeature;
 import boofcv.alg.distort.ImageDistort;
 import boofcv.alg.distort.PixelTransformHomography_F32;
 import boofcv.alg.distort.impl.DistortSupport;
+import boofcv.alg.feature.associate.AssociateSurfBasic;
 import boofcv.alg.interpolate.InterpolatePixelS;
 import boofcv.core.image.border.BorderType;
-import boofcv.factory.distort.FactoryDistort;
 import boofcv.factory.feature.associate.FactoryAssociation;
-import boofcv.factory.feature.dense.ConfigDenseHoG;
-import boofcv.factory.feature.dense.FactoryDescribeImageDense;
 import boofcv.factory.feature.detdesc.FactoryDetectDescribe;
-import boofcv.factory.feature.detect.edge.FactoryEdgeDetectors;
-import boofcv.factory.feature.detect.interest.FactoryDetectPoint;
 import boofcv.factory.geo.ConfigLMedS;
 import boofcv.factory.geo.ConfigRansac;
 import boofcv.factory.geo.FactoryMultiViewRobust;
 import boofcv.factory.interpolate.FactoryInterpolation;
-import boofcv.io.image.ConvertBufferedImage;
 import boofcv.struct.feature.AssociatedIndex;
 import boofcv.struct.feature.BrightFeature;
-import boofcv.struct.feature.TupleDesc;
+import boofcv.struct.feature.TupleDesc_F64;
 import boofcv.struct.geo.AssociatedPair;
 import boofcv.struct.image.GrayF32;
 import boofcv.struct.image.ImageBase;
-import boofcv.struct.image.ImageGray;
 import boofcv.struct.image.Planar;
 import georegression.struct.homography.Homography2D_F64;
 import georegression.struct.point.Point2D_F64;
 import georegression.struct.point.Point2D_I32;
 import georegression.transform.homography.HomographyPointOps_F64;
-import net.coobird.thumbnailator.Thumbnails;
 
-public class MultipleStitcher {
+public class Stitcher {
 	
 	private DetectDescribePoint<GrayF32, BrightFeature> detDesc;
-	private ScoreAssociation<BrightFeature> scorer;
-	private AssociateDescription<BrightFeature> associate;
+	private AssociateDescription associate;
 	private ModelMatcher<Homography2D_F64, AssociatedPair> modelMatcher;
-	
-    public MultipleStitcher() {
-    	detDesc = FactoryDetectDescribe
-				.surfStable(new ConfigFastHessian(1, 2, 1500, 1, 9, 4, 4), null, null, GrayF32.class);
-		scorer = FactoryAssociation.scoreEuclidean(BrightFeature.class, true);
-		associate = FactoryAssociation.greedy(scorer, Double.MAX_VALUE, true);
+    public Stitcher() {
+    	this(StitcherConfigurationFactory.surfGreedyBright());
+		
+    }
+    public Stitcher(StitcherConfiguration config) {
+    	this.detDesc = config.detDesc;
+    	this.associate = config.associate;
     }
     
 	public Planar<GrayF32> stitch(List<Planar<GrayF32>> images) {
-		
+		//long beginningtime = System.currentTimeMillis();
 		modelMatcher = FactoryMultiViewRobust.homographyRansac(null,
-				new ConfigRansac(3000, 1));
+				new ConfigRansac(5000, 5));
 		DescribedImage mainImage = new DescribedImage(images.remove(0), detDesc);
 		List<DescribedImage> imagesToStitch = computeDescriptions(images, detDesc);
 		
-		int bestNumberOfMatches = 0;
+		int bestNumberOfMatches;
 		DescribedImage bestImageToStitch;
-		
-		FastQueue<AssociatedIndex> matches = new FastQueue<>(AssociatedIndex.class, true);
 		int indexOfBestImageToStitch = 0;
+		FastQueue<AssociatedIndex> matches = new FastQueue<>(AssociatedIndex.class, true);
+		
 		while (!imagesToStitch.isEmpty()) {
 			mainImage.describe();
+			//System.out.println("description + init grey images ="+ (System.currentTimeMillis()-beginningtime));
 			bestNumberOfMatches = 0;
+			associate.setSource(mainImage.description);
 			for (int i = 0; i < imagesToStitch.size(); i++) {
-				associate.setSource(mainImage.description);
+				//beginningtime = System.currentTimeMillis();
 				associate.setDestination(imagesToStitch.get(i).description);
 				associate.associate();
-
+				//System.out.println("matching ="+ (System.currentTimeMillis()-beginningtime));
 				if (associate.getMatches().size > bestNumberOfMatches) {
 					bestNumberOfMatches = associate.getMatches().size;
 					indexOfBestImageToStitch = i;
@@ -92,7 +85,7 @@ public class MultipleStitcher {
 
 			bestImageToStitch = imagesToStitch.remove(indexOfBestImageToStitch);
 			List<AssociatedPair> pairs = new ArrayList<>();
-
+			System.out.println("number of pairs "+matches.size());
 			for (int i = 0; i < matches.size(); i++) {
 				AssociatedIndex match = matches.get(i);
 				Point2D_F64 a = mainImage.locationsOfFeaturePoints.get(match.src);
@@ -104,11 +97,14 @@ public class MultipleStitcher {
 			matches.reset();
 			// find the best fit model to describe the change between these
 			// images
+			//beginningtime = System.currentTimeMillis();
 			if (!modelMatcher.process(pairs))
 				throw new RuntimeException("Model Matcher failed!");
-			Homography2D_F64 homografia = modelMatcher.getModelParameters().copy();
-			
-			connect(mainImage, bestImageToStitch, homografia);
+			Homography2D_F64 homografy = modelMatcher.getModelParameters().copy();
+			//System.out.println("hladanie homografie"+ (System.currentTimeMillis()-beginningtime));
+			//beginningtime = System.currentTimeMillis();
+			connect(mainImage, bestImageToStitch, homografy);
+			//System.out.println("spojenie = "+ (System.currentTimeMillis()-beginningtime));
 			
 		}
 		
@@ -126,35 +122,34 @@ public class MultipleStitcher {
 
 	}
 
-	private void connect(DescribedImage main, DescribedImage bestImageToConnect, Homography2D_F64 fromAtoB) {
+	private void connect(DescribedImage main, DescribedImage secondary, Homography2D_F64 fromAtoB) {
 		
 		double scale = 1;
 		
 		Planar<GrayF32> colorA = main.colorImage;
-		Planar<GrayF32> colorB = bestImageToConnect.colorImage;
+		Planar<GrayF32> colorB = secondary.colorImage;
 		
-		StitchedPictureSize sizeOfOutputColorImage = getSizeOfStitchedImage(main.colorImage, bestImageToConnect.colorImage, fromAtoB);
+		StitchedPictureSize sizeOfOutputImage = getSizeOfStitchedImage(main.colorImage, secondary.colorImage, fromAtoB);
 		// Where the output images are rendered into
-		Planar<GrayF32> connectedColor = colorA.createNew(sizeOfOutputColorImage.getWidthOfOutputImage(),
-				sizeOfOutputColorImage.getHeightOfOutputImage());
-		// Adjust the transform so that the whole image can appear inside of it
-		Homography2D_F64 fromAToWorkColor = new Homography2D_F64(scale, 0, sizeOfOutputColorImage.getShiftRight(),0, scale,
-				sizeOfOutputColorImage.getShiftDown(), 0, 0, 1);
-		Homography2D_F64 fromWorkToAColor = fromAToWorkColor.invert(null);
+		Planar<GrayF32> connected = colorA.createNew(sizeOfOutputImage.getWidthOfOutputImage(),
+				sizeOfOutputImage.getHeightOfOutputImage());
+		Homography2D_F64 fromAToConnected = new Homography2D_F64(scale, 0, sizeOfOutputImage.getShiftRight(),0, scale,
+				sizeOfOutputImage.getShiftDown(), 0, 0, 1);
+		Homography2D_F64 fromConnectedToA = fromAToConnected.invert(null);
 		// Used to render the results onto an image
 		PixelTransformHomography_F32 modelColor = new PixelTransformHomography_F32();
 		InterpolatePixelS<GrayF32> interp = FactoryInterpolation.bilinearPixelS(GrayF32.class, BorderType.ZERO);
-		ImageDistort<Planar<GrayF32>, Planar<GrayF32>> distortColor = DistortSupport.createDistortPL(GrayF32.class, modelColor,
+		ImageDistort<Planar<GrayF32>, Planar<GrayF32>> distort = DistortSupport.createDistortPL(GrayF32.class, modelColor,
 				interp, false);
-		distortColor.setRenderAll(false);
+		distort.setRenderAll(false);
 		// Render first image
-		modelColor.set(fromWorkToAColor);
-		distortColor.apply(colorA, connectedColor);
+		modelColor.set(fromConnectedToA);
+		distort.apply(colorA, connected);
 		// Render second image
-		Homography2D_F64 fromWorkToBColor = fromWorkToAColor.concat(fromAtoB, null);
-		modelColor.set(fromWorkToBColor);
-		distortColor.apply(colorB, connectedColor);
-		main.colorImage = connectedColor;
+		Homography2D_F64 fromConnectedToB = fromConnectedToA.concat(fromAtoB, null);
+		modelColor.set(fromConnectedToB);
+		distort.apply(colorB, connected);
+		main.colorImage = connected;
 		main.grayImage = new GrayF32(main.colorImage.width, main.colorImage.height);
 		ColorRgb.rgbToGray_Weighted_F32(main.colorImage, main.grayImage);
 	}
